@@ -207,7 +207,7 @@ class Post {
                                                         }
                                                 } else {
                                                         for (field in fields) {
-                                                                if (fields.hasOwnProperty(field)) {
+                                                                if (fields.hasOwnProperty(field) && field != 'id') {
                                                                         values += field + ',';
                                                                         if ((field.substring(field.length - 1, field.length) == 'F') && (fields[field].length > 10)) {
                                                                                 //let newPath = "./../"+database+"/fotosapp/" + tableWithDatas + "-"+this.getDateTime()+ "-T" + fields['tienda_id'] + "-U" + fields['usuario_id'] + ".jpeg";
@@ -281,11 +281,20 @@ class Post {
                         insertToDataBase();
                 })
 
-                function promiseSqrt(sql) {
+		function promiseSqrt(sql) {
                         let table = sql.split(' ')[2];
+                        console.log('🔍 EJECUTANDO SQL:', sql);
                         return new Promise(function (fulfill, reject) {
                                 //console.log('sqlcadena => ', sqlcadena);
                                 connection.query(sql, (err, rows, fields) => {
+                                        if (err) {
+                                                console.error('❌ ERROR EN SQL:', err.message);
+                                                console.error('❌ SQL QUE FALLÓ:', sql);
+                                                reject(err);
+                                                return;
+                                        }
+
+                                        console.log('✅ SQL EXITOSO, tabla:', table);
 
                                         if (table == 'actividades') {
                                                 connection.query('select max(id) as id from actividades', (e, r) => {
@@ -316,6 +325,7 @@ class Post {
                 }
         }
 
+// Endpoint para actualizar URL de imagen S3 en check-in        updateCheckInImage(app) {                app.post("/api/updateCheckInImage", async (req, res) => {                        try {                                const { registro_id, imagen_url, cuenta } = req.body;                                console.log("📸 Actualizando imagen de check-in");                                console.log("   - Registro ID:", registro_id);                                console.log("   - URL S3:", imagen_url);                                console.log("   - Cuenta:", cuenta);                                if (!registro_id || !imagen_url || !cuenta) {                                        return res.status(400).json({                                                 error: "Faltan parámetros requeridos",                                                required: ["registro_id", "imagen_url", "cuenta"]                                        });                                }                                await this.promiseSqrt();                                const query = ;                                await this.promiseSqrt(query, [imagen_url, registro_id]);                                console.log("✅ Imagen de check-in actualizada en BD");                                res.json({                                         success: true,                                         message: "Imagen actualizada correctamente",                                        registro_id: registro_id,                                        imagen_url: imagen_url                                });                        } catch (error) {                                console.error("❌ Error updating check-in image:", error);                                res.status(500).json({ error: error.message });                        }                });        }
         getDateTime() {
                 var currentdate = new Date();
                 var datetime = "" + currentdate.getDate() + ""
