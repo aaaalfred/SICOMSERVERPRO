@@ -5,3 +5,25 @@ node_modules/
 *.tar.gz
 .DS_Store
 src/database/sicom-firebase.json
+
+
+# Archivos de respaldo y temporales
+*.bak
+*.backup*
+*.log
+*.json
+
+# Carpetas de logs o temporales
+logs/
+src/api/apps_logs/
+
+# Archivos de entorno
+.env
+.env.local
+
+# Dependencias de Node
+node_modules/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

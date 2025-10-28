@@ -15,9 +15,26 @@ const path = require('path');
 var fs = require('fs');
 var admin = require("firebase-admin");
 const axios = require("axios");
-
+const { v4: uuidv4 } = require("uuid");
 
 var connection = null;
+
+const pools = {};
+
+function getPool(database) {
+  if (!pools[database]) {
+    pools[database] = mysql.createPool({
+      host: '193.203.165.213',
+      user: 'alfred',
+      password: 'Abcde$1409',
+      database: database,
+      port: 3306,
+      connectionLimit: 10 // 🔹 máximo 10 conexiones simultáneas por cliente
+    });
+    console.log(`🔗 Pool creado para base de datos: ${database}`);
+  }
+  return pools[database];
+}
 
 var serve = new server.Server();
 serve.serverInit();
@@ -104,26 +121,107 @@ server.app.post('/savelocations', (req, res) => {
 
 server.app.post('/savelocationsusers', (req, res) => {
   let location = JSON.parse(JSON.stringify(req.body));
-  console.log('insert locations :',location.lat, ' ', location.lng);
+  console.log('Guardando ubicación usuario:',location.usuario, 'lat:', location.lat, 'lng:', location.lng);
   let connection= null;
   new Promise((resolve, reject) => {
     connection = post.connection(location.cuenta);
     connection.connect((err) => {
       if (err) reject(err);
-      connection.query("insert into locationsusers values(0, "
-        + location.usuario +", NOW(), "
-        + location.lat +", "
-        + location.lng +");", (error, rows, fields) => {
-          if (error) reject(error);
+      
+      // Insertar en tabla geolocalizacionusuarios (la tabla correcta que usa el Frontend)
+      const query = `INSERT INTO geolocalizacionusuarios 
+        (id_usuario, created_at, lat, log, fechahora, bateria, confianza, calidad_red, latencia_red)
+        VALUES (
+          ${location.usuario},
+          NOW(),
+          ${location.lat},
+          ${location.lng},
+          '${location.datetime || new Date().toISOString()}',
+          ${location.bateria || 0},
+          ${location.precision || 0},
+          ${location.calidad_red ? "'" + location.calidad_red + "'" : 'NULL'},
+          ${location.latencia_red || 'NULL'}
+        )`;
+      
+      connection.query(query, (error, rows, fields) => {
+        connection.end();
+        if (error) {
+          console.error('Error insertando en geolocalizacionusuarios:', error);
+          reject(error);
+        } else {
+          console.log('Ubicación guardada en geolocalizacionusuarios');
           resolve(rows);
-        });
+        }
+      });
     });
   }).then((data) => {
-    res.json({"status": 1});
+    res.json({"status": 1, "message": "Ubicación guardada en BD"});
   }).catch((err) => {
-    console.log(err);
-    res.json({"status": 2})
+    console.error('Error:', err);
+    res.json({"status": 2, "error": err.message})
   });
+});
+
+
+// NUEVO ENDPOINT: Solicitar ubicacion a dispositivo via Socket.IO
+// Manejar preflight CORS
+server.app.options('/solicitar-ubicacion-dispositivo', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(200);
+});
+
+server.app.post('/solicitar-ubicacion-dispositivo', (req, res) => {
+  // Agregar headers CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  try {
+    const { usuario_id, database = 'devsicom' } = req.body;
+
+    if (!usuario_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Falta parámetro: usuario_id'
+      });
+    }
+
+    console.log('Solicitar ubicación Usuario:', usuario_id, 'Base:', database);
+
+    // Usar Socket.IO SocketPeticiones para solicitar al dispositivo
+    const enviado = sktPeticiones.solicitarDatos(
+      database,
+      usuario_id,
+      'request_location_history',
+      { limit: 10 }
+    );
+
+    if (enviado) {
+      console.log('Solicitud enviada al dispositivo via Socket.IO');
+      return res.json({
+        success: true,
+        message: 'Solicitud de ubicación enviada al dispositivo',
+        usuario_id,
+        database,
+        metodo: 'Socket.IO 8070'
+      });
+    } else {
+      console.warn('Dispositivo NO conectado');
+      return res.status(503).json({
+        success: false,
+        error: 'Dispositivo no conectado',
+        usuario_id,
+        database
+      });
+    }
+  } catch (error) {
+    console.error('Error en solicitar-ubicacion-dispositivo:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Error al procesar solicitud'
+    });
+  }
 });
 
 /* ::::::::::::::::::::::::::::¨FIN Peticiones POST ::::::::::::::::::::*/
@@ -1408,6 +1506,102 @@ server.app.get('/saveInvFan/:database/:tienda/:sistema/:bodega/:piso/:inventario
    });
 });
 
+server.app.get('/getEtapasPendientes/:db/:tienda_id/:usuario_id', (req, res) => {
+  const { db, tienda_id, usuario_id } = req.params;
+  const pool = getPool(db);
+
+  const query = `
+    SELECT e.*
+    FROM ejecucion e
+    INNER JOIN (
+        SELECT grupo
+        FROM ejecucion
+        WHERE DATE(fecha) = CURDATE()
+        GROUP BY grupo
+        HAVING COUNT(*) = 1
+    ) solo_uno ON e.grupo = solo_uno.grupo
+    WHERE e.tienda_id = ?
+      AND e.usuario_id = ?
+      AND DATE(e.fecha) = CURDATE();
+  `;
+
+  pool.query(query, [tienda_id, usuario_id], (err, rows) => {
+    if (err) {
+      console.error("❌ Error en /getEtapasPendientes:", err);
+      return res.status(500).json({ error: "DB error" });
+    }
+    res.json(rows);
+  });
+});
+
+server.app.post('/postSaveEtapa', (req, res) => {
+  console.log('entro a postSaveEtapa');
+  const etapa = JSON.parse(JSON.stringify(req.body));
+  const pool = getPool(etapa.db);
+
+  let { tienda_id, usuario_id, grupo, valores } = etapa;
+
+  if (grupo && typeof grupo === "object" && grupo.type === "Buffer") {
+    grupo = Buffer.from(grupo).toString(); 
+  }
+
+  if (!grupo || grupo === "") {
+    grupo = uuidv4();
+  }
+
+  // 🔹 Campos fijos que siempre van
+  const fixedFields = ["fecha", "tienda_id", "usuario_id", "grupo"];
+  const fixedValues = ["NOW()", "?", "?", "?"];
+  const params = [tienda_id, usuario_id, grupo];
+
+  // 🔹 Campos dinámicos
+  const dynamicFields = [];
+  const dynamicPlaceholders = [];
+
+  for (const [campo, valor] of Object.entries(valores || {})) {
+    console.log(`for en postSaveEtapa con ${campo}`);
+    if (typeof valor === "string" && valor.length > 1000) {
+      console.log(`entro a if 1000 en postSaveEtapa con ${campo}`);
+      const nombre_img = `${Date.now()}_${usuario_id}_${campo}.jpg`;
+      const pathToDatabase = `/${etapa.db}/fotosapp/${nombre_img}`;
+      const pathToServer = `../${etapa.db}/fotosapp/${nombre_img}`;
+
+      try {
+        fs.writeFileSync(pathToServer, Buffer.from(valor, "base64"));
+        console.log(`✅ Imagen ${campo} guardada en ${pathToServer}`);
+
+        dynamicFields.push(campo);
+        dynamicPlaceholders.push("?");
+        params.push(pathToDatabase);
+      } catch (err) {
+        console.log(`❌ Error guardando imagen: ${err}`);
+        return res.status(500).json({ error: "Error guardando imagen" });
+      }
+    } else {
+      console.log(`entro a else en postSaveEtapa con ${campo}`);
+      dynamicFields.push(campo);
+      dynamicPlaceholders.push("?");
+      params.push(valor);
+    }
+  }
+
+  const query = `
+    INSERT INTO ejecucion
+    (${["id", ...fixedFields, ...dynamicFields].join(", ")})
+    VALUES (0, ${fixedValues.join(", ")}, ${dynamicPlaceholders.join(", ")});
+  `;
+
+  pool.query(query, params, (err, result) => {
+    if (err) {
+      console.log(`❌ Error en /postSaveEtapa: ${err}`);
+      console.log("📝 Query:", query);
+      console.log("📝 Params:", params);
+      return res.status(500).json({ error: "DB error" });
+    }
+    res.json({ id: result.insertId, grupo, msg: "Etapa registrada" });
+  });
+});
+
 function getDateTime(){
   return new Promise((resolve, reject) => {
     var currentdate = new Date();
@@ -1907,6 +2101,54 @@ function createImageCheckInsMultDist(nombre_imagen, imgF, c_x_i, c_y_i, fecha_i,
   });
 }
 
+// Endpoint para actualizar URL de imagen S3 en check-in
+server.app.post('/updateCheckInImage', async (req, res) => {
+  try {
+    const { registro_id, imagen_url, cuenta } = req.body;
+
+    console.log("📸 Actualizando imagen de check-in");
+    console.log("   - Registro ID:", registro_id);
+    console.log("   - URL S3:", imagen_url);
+    console.log("   - Cuenta:", cuenta);
+
+    if (!registro_id || !imagen_url || !cuenta) {
+      return res.status(400).json({
+        error: "Faltan parámetros requeridos",
+        required: ["registro_id", "imagen_url", "cuenta"]
+      });
+    }
+
+    const connection = post.connection(cuenta);
+    connection.connect(async (err) => {
+      if (err) {
+        console.error("❌ Error conectando a BD:", err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      const query = "UPDATE actividades SET imagen_url = ?, imagen_updated_at = NOW() WHERE id = ?";
+      connection.query(query, [imagen_url, registro_id], (err, result) => {
+        connection.end();
+
+        if (err) {
+          console.error("❌ Error actualizando imagen:", err);
+          return res.status(500).json({ error: err.message });
+        }
+
+        console.log("✅ Imagen actualizada - Rows affected:", result.affectedRows);
+        res.json({
+          success: true,
+          message: "Imagen actualizada correctamente",
+          registro_id: registro_id,
+          imagen_url: imagen_url,
+          rows_affected: result.affectedRows
+        });
+      });
+    });
+  } catch (error) {
+    console.error("❌ Error en updateCheckInImage:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 server.app.post('/postSaveInvFanS3', (req, res) => {
   let imagesArray = JSON.parse(JSON.stringify(req.body));

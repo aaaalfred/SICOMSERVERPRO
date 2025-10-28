@@ -325,7 +325,6 @@ class Post {
                 }
         }
 
-// Endpoint para actualizar URL de imagen S3 en check-in        updateCheckInImage(app) {                app.post("/api/updateCheckInImage", async (req, res) => {                        try {                                const { registro_id, imagen_url, cuenta } = req.body;                                console.log("📸 Actualizando imagen de check-in");                                console.log("   - Registro ID:", registro_id);                                console.log("   - URL S3:", imagen_url);                                console.log("   - Cuenta:", cuenta);                                if (!registro_id || !imagen_url || !cuenta) {                                        return res.status(400).json({                                                 error: "Faltan parámetros requeridos",                                                required: ["registro_id", "imagen_url", "cuenta"]                                        });                                }                                await this.promiseSqrt();                                const query = ;                                await this.promiseSqrt(query, [imagen_url, registro_id]);                                console.log("✅ Imagen de check-in actualizada en BD");                                res.json({                                         success: true,                                         message: "Imagen actualizada correctamente",                                        registro_id: registro_id,                                        imagen_url: imagen_url                                });                        } catch (error) {                                console.error("❌ Error updating check-in image:", error);                                res.status(500).json({ error: error.message });                        }                });        }
         // Endpoint para actualizar URL de imagen S3 en check-in
         updateCheckInImage(app) {
                 app.post("/api/updateCheckInImage", async (req, res) => {
@@ -338,7 +337,7 @@ class Post {
                                 console.log("   - Cuenta:", cuenta);
 
                                 if (!registro_id || !imagen_url || !cuenta) {
-                                        return res.status(400).json({ 
+                                        return res.status(400).json({
                                                 error: "Faltan parámetros requeridos",
                                                 required: ["registro_id", "imagen_url", "cuenta"]
                                         });
@@ -351,8 +350,8 @@ class Post {
 
                                 console.log("✅ Imagen de check-in actualizada en BD");
 
-                                res.json({ 
-                                        success: true, 
+                                res.json({
+                                        success: true,
                                         message: "Imagen actualizada correctamente",
                                         registro_id: registro_id,
                                         imagen_url: imagen_url
