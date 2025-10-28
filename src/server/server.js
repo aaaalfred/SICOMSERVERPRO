@@ -16,9 +16,9 @@ app.use(cors())
 class Server {
 
 	serverInit(){
-      app.listen(2025, () => {
+      app.listen(2025, '0.0.0.0', () => {
       	// antes 3060
-        console.log('servidor ejecutandose en el puerto 2020!');
+        console.log('✅ servidor ejecutandose en el puerto 2025 en TODAS LAS INTERFACES!');
       });
   	}
 }

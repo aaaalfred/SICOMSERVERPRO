@@ -2103,7 +2103,7 @@ function createImageCheckInsMultDist(nombre_imagen, imgF, c_x_i, c_y_i, fecha_i,
 }
 
 // Endpoint para actualizar URL de imagen S3 en check-in
-server.app.post('/updateCheckInImage', async (req, res) => {
+server.app.post('/api/updateCheckInImage', async (req, res) => {
   try {
     const { registro_id, imagen_url, cuenta } = req.body;
 

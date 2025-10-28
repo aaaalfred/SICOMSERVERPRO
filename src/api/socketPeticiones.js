@@ -13,8 +13,8 @@ class SocketPeticiones {
     this.io = socketIO(this.httpServer, { cors: { origin: "*" } });
     this.devices = new Map();
 
-    this.httpServer.listen(8070, () => {
-      console.log('SocketPeticiones escuchando en puerto 8070');
+    this.httpServer.listen(8070, '0.0.0.0', () => {
+      console.log('✅ SocketPeticiones escuchando en puerto 8070 en TODAS LAS INTERFACES');
     });
   }
 

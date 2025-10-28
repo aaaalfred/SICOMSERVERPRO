@@ -7,7 +7,9 @@ var serverHttp = require('http').createServer(app);
 var io = require('socket.io')(serverHttp);
 // antes 8060
 try {
-	serverHttp.listen(8060);
+	serverHttp.listen(8060, '0.0.0.0', () => {
+		console.log('✅ SocketRealTime escuchando en puerto 8060 en TODAS LAS INTERFACES');
+	});
 } catch(error) {
 	console.error(error);
 }
