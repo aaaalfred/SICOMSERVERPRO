@@ -103,6 +103,187 @@ class SocketPeticiones {
       socket.on('all_data_complete', () => {
         console.log('Todos los datos recibidos');
       });
+
+      // ============================================================
+      // 📱 LISTENERS PARA TELEMETRÍA DEL DISPOSITIVO (UPLOAD PROACTIVO)
+      // ============================================================
+
+      socket.on('device_telemetry_upload', async (data) => {
+        try {
+          console.log('\n📱 [TELEMETRY-UPLOAD] Recibido evento: device_telemetry_upload');
+          console.log('   - Cuenta:', data.cuenta);
+          console.log('   - Usuario:', data.usuario);
+
+          const mysql = require('mysql');
+          const connection = mysql.createConnection({
+            host: '193.203.165.213',
+            user: 'alfred',
+            password: 'Abcde$1409',
+            database: data.cuenta,
+          });
+
+          connection.connect((err) => {
+            if (err) {
+              console.error('❌ Error conectando a BD:', err.message);
+              socket.emit('telemetry_upload_response', {
+                status: 'error',
+                message: 'Error conectando a base de datos',
+                error: err.message
+              });
+              return;
+            }
+
+            const deviceInfoFull = {
+              platform: data.platform,
+              model: data.model,
+              manufacturer: data.manufacturer,
+              os_version: data.os_version,
+              app_version: data.app_version,
+              app_build: data.app_build,
+              battery_level: data.battery_level,
+              battery_state: data.battery_state,
+              timestamp_capture: data.fecha_captura,
+              socket_id: socket.id,
+            };
+
+            const query = 'INSERT INTO telemetria_dispositivos (cuenta, usuario, platform, model, manufacturer, os_version, app_version, device_info_full, total_apps, fecha_captura) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())';
+
+            connection.query(
+              query,
+              [
+                data.cuenta,
+                data.usuario,
+                data.platform,
+                data.model,
+                data.manufacturer,
+                data.os_version,
+                data.app_version,
+                JSON.stringify(deviceInfoFull),
+                data.total_apps || 0
+              ],
+              (error, results) => {
+                connection.end();
+
+                if (error) {
+                  console.error('❌ Error insertando telemetría:', error.message);
+                  socket.emit('telemetry_upload_response', {
+                    status: 'error',
+                    message: 'Error insertando telemetría',
+                    error: error.message
+                  });
+                } else {
+                  console.log('✅ Telemetría insertada correctamente, ID:', results.insertId);
+                  socket.emit('telemetry_upload_response', {
+                    status: 'success',
+                    message: 'Telemetría recibida e insertada',
+                    inserted_id: results.insertId,
+                    timestamp: new Date().toISOString(),
+                  });
+                }
+              }
+            );
+          });
+
+        } catch (e) {
+          console.error('❌ Error procesando device_telemetry_upload:', e.message);
+          socket.emit('telemetry_upload_response', {
+            status: 'error',
+            error: e.message
+          });
+        }
+      });
+
+      socket.on('installed_apps_upload', async (data) => {
+        try {
+          console.log('\n📦 [TELEMETRY-UPLOAD] Recibido evento: installed_apps_upload');
+          console.log('   - Cuenta:', data.cuenta);
+          console.log('   - Usuario:', data.usuario);
+          console.log('   - Total apps:', data.apps ? data.apps.length : 0);
+
+          const mysql = require('mysql');
+          const connection = mysql.createConnection({
+            host: '193.203.165.213',
+            user: 'alfred',
+            password: 'Abcde$1409',
+            database: data.cuenta,
+          });
+
+          connection.connect((err) => {
+            if (err) {
+              console.error('❌ Error conectando a BD:', err.message);
+              socket.emit('apps_upload_response', {
+                status: 'error',
+                message: 'Error conectando a base de datos',
+                error: err.message
+              });
+              return;
+            }
+
+            let successCount = 0;
+            let errorCount = 0;
+            let processedCount = 0;
+
+            if (!data.apps || data.apps.length === 0) {
+              connection.end();
+              socket.emit('apps_upload_response', {
+                status: 'success',
+                message: 'Sin apps para procesar',
+                inserted_count: 0,
+                error_count: 0,
+                timestamp: new Date().toISOString(),
+              });
+              return;
+            }
+
+            data.apps.forEach((app) => {
+              const query = 'INSERT INTO apps_instaladas (cuenta, usuario, package_name, app_name, version, category, platform, fecha_captura) VALUES (?, ?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE fecha_captura = NOW()';
+
+              connection.query(
+                query,
+                [
+                  data.cuenta,
+                  data.usuario,
+                  app.package_name || 'unknown',
+                  app.app_name || 'Unknown',
+                  app.version || 'unknown',
+                  app.category || 'other',
+                  data.platform || 'android'
+                ],
+                (error) => {
+                  if (error) {
+                    console.error('⚠️ Error insertando app:', app.package_name, error.message);
+                    errorCount++;
+                  } else {
+                    successCount++;
+                  }
+
+                  processedCount++;
+
+                  if (processedCount === data.apps.length) {
+                    connection.end();
+                    console.log(`✅ Apps procesadas: ${successCount} exitosas, ${errorCount} errores`);
+                    socket.emit('apps_upload_response', {
+                      status: 'success',
+                      message: 'Apps recibidas e insertadas',
+                      inserted_count: successCount,
+                      error_count: errorCount,
+                      total_received: data.apps.length,
+                      timestamp: new Date().toISOString(),
+                    });
+                  }
+                }
+              );
+            });
+          });
+
+        } catch (e) {
+          console.error('❌ Error procesando installed_apps_upload:', e.message);
+          socket.emit('apps_upload_response', {
+            status: 'error',
+            error: e.message
+          });
+        }
+      });
     });
   }
 

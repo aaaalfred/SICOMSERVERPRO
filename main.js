@@ -6,14 +6,14 @@ const restGet = require('./src/api/restGet.js');
 const restPost = require('./src/api/restPost.js');
 const restAppInfo = require('./src/api/restAppInfo.js');
 const socketRealTime = require('./src/api/socketRealTime.js');
-const firebaseCheckEvents = require('./src/api/firebase.js');
+// const firebaseCheckEvents = require('./src/api/firebase.js'); // Comentado para desarrollo local
 const checkDupl = require('./src/api/checkDuplicate.js');
 const socketPeticiones = require('./src/api/socketPeticiones.js');
 
 const mysql = require('mysql');
 const path = require('path');
 var fs = require('fs');
-var admin = require("firebase-admin");
+// var admin = require("firebase-admin"); // Comentado para desarrollo local
 const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
 
@@ -45,11 +45,12 @@ var appinfo = new restAppInfo.AppInfo();
 
 
 /*:::::::::::::: Firebase :::::::::::::::::::::::::::::::::::::::::::::::::::::*/
-var firebaseCheck = new firebaseCheckEvents.FirebaseCheckEvents();
+// Comentado para desarrollo local
+//var firebaseCheck = new firebaseCheckEvents.FirebaseCheckEvents();
 
 //firebaseCheck.initializeApp();
 
-firebaseCheck.startCheckEvents();
+//firebaseCheck.startCheckEvents();
 
 /*:::::::::::::: Socket :::::::::::::::::::::::::::::::::::::::::::::::::::::*/
 var sktRealTime = new socketRealTime.SocketRealTime();
